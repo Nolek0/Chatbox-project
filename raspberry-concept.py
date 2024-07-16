@@ -73,7 +73,6 @@ def check_and_update():
                         speak("Mise à jour refusée. Continuation du programme.")
                 else:
                     print("Vous utilisez déjà la version la plus récente.")
-                    speak("Vous utilisez déjà la version la plus récente. Continuation du programme.")
             else:
                 print("Contenu invalide dans check-for-updates.txt.")
                 speak("Erreur dans le fichier de mise à jour. Veuillez vérifier.")
