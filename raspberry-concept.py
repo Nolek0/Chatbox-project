@@ -10,7 +10,7 @@ check_for_update_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project
 raspberry_concept_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/raspberry-concept.py"
 
 # Numéro de version actuelle de raspberry-concept.py
-VERSION = "1.01"
+VERSION = "1.02"
 
 # Fonction pour parler avec pyttsx3
 def speak(text):
@@ -117,7 +117,7 @@ from translate import Translator
 script_folder = os.path.dirname(os.path.abspath(__file__))
 
 # Supprimer les anciens fichiers spécifiques s'ils existent
-files_to_delete = ["api.env", "quiz.py", "recette.py", "responses.py", "responses_heure.py", "responses_inapproprié.py"]
+files_to_delete = ["api.env", "quiz.py", "recette.py", "responses.py", "responses_heure.py", "responses_inapproprié.py", "reveil.mp3", "sons-sortant.mp3", "sons-repere.mp3", "demarrage.mp3" ]
 
 # Liste des fichiers à télécharger avec leurs URLs sur GitHub
 files_to_download = {
@@ -126,7 +126,11 @@ files_to_download = {
     "recette.py": "https://github.com/Nolek0/Chatbox-project/raw/main/recette.py",
     "responses.py": "https://github.com/Nolek0/Chatbox-project/raw/main/responses.py",
     "responses_heure.py": "https://github.com/Nolek0/Chatbox-project/raw/main/responses_heure.py",
-    "responses_inapproprié.py": "https://github.com/Nolek0/Chatbox-project/raw/main/responses_inapproprié.py"
+    "responses_inapproprié.py": "https://github.com/Nolek0/Chatbox-project/raw/main/responses_inapproprié.py",
+    "demarrage.mp3": "https://github.com/Nolek0/Chatbox-project/raw/main/demarrage.mp3",
+    "sons-repere.mp3": "https://github.com/Nolek0/Chatbox-project/raw/main/sons-repere.mp3",
+    "sons-sortant.mp3": "https://github.com/Nolek0/Chatbox-project/raw/main/sons-sortant.mp3",
+    "reveil.mp3": "https://github.com/Nolek0/Chatbox-project/raw/main/reveil.mp3",
 }
 
 
