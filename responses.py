@@ -2914,7 +2914,7 @@ responses = {
     "Quelle est la définition de insomnie": ["Difficulté à dormir ou à trouver le sommeil, souvent accompagnée d'éveils nocturnes fréquents ou précoces.", "Trouble du sommeil caractérisé par une diminution de la durée ou de la qualité du sommeil."],
     "Quelle est la définition de instance": ["Organe, autorité chargée d'exercer une fonction ou de rendre une décision dans un domaine spécifique.", "Action d'intervenir ou de se manifester en vue de résoudre un problème ou de régler une affaire."],
     "neymar la maison": ["oui oui c'est clair"],
-    "Playstation 5": ["Allo papa mais ké passa"],
+    "Playstation 5": ["Vamo ala amos aaa mosse"],
 
 
 
