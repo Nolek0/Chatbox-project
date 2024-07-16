@@ -1,29 +1,16 @@
-import os
 import requests
+import os
 import pyttsx3
-import time
 import subprocess
 import sys
+import speech_recognition as sr  # Import de speech_recognition
 
-# URL des fichiers sur GitHub
+# URL et nom du fichier de vérification de mise à jour
 check_for_update_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/check-for-updates.txt"
 raspberry_concept_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/raspberry-concept.py"
 
-# Fonction pour télécharger un fichier depuis une URL
-def download_file(url, destination):
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            with open(destination, "wb") as f:
-                f.write(response.content)
-            print(f"Le fichier {destination} a été téléchargé avec succès depuis {url}")
-            return True
-        else:
-            print(f"Échec du téléchargement du fichier {destination} depuis {url} : code de statut {response.status_code}")
-            return False
-    except requests.exceptions.RequestException as e:
-        print(f"Erreur lors du téléchargement du fichier {destination} depuis {url} : {e}")
-        return False
+# Numéro de version actuelle de raspberry-concept.py
+VERSION = "1.01"
 
 # Fonction pour parler avec pyttsx3
 def speak(text):
@@ -31,50 +18,84 @@ def speak(text):
     engine.say(text)
     engine.runAndWait()
 
+# Fonction pour écouter la réponse vocale
+def listen():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("Dites 'oui' ou 'non' pour répondre.")
+        audio = recognizer.listen(source)
+    try:
+        user_input = recognizer.recognize_google(audio, language="fr-FR").lower()
+        print(f"Vous avez dit : {user_input}")
+        return user_input
+    except sr.UnknownValueError:
+        print("Désolé, je n'ai pas compris votre réponse.")
+        return ""
+    except sr.RequestError:
+        print("Désolé, une erreur s'est produite lors de la requête vers Google Speech Recognition.")
+        return ""
+
 # Fonction principale pour vérifier et mettre à jour si nécessaire
 def check_and_update():
-    # Téléchargement de check-for-updates.txt
-    if download_file(check_for_update_url, "check-for-updates.txt"):
-        # Lire le contenu de check-for-updates.txt
-        with open("check-for-updates.txt", "r") as update_file:
-            update_content = update_file.read().strip().lower()  # Lecture et nettoyage du contenu
-            if update_content == "true":
-                print("Une nouvelle mise à jour est disponible.")
-                speak("Une nouvelle mise à jour est disponible. Voulez-vous la télécharger ?")
-                user_input = input("Voulez-vous télécharger la mise à jour ? (oui/non) ").lower()
-                if user_input == "oui":
-                    # Téléchargement et remplacement de raspberry-concept.py
-                    if download_file(raspberry_concept_url, "raspberry-concept_new.py"):
-                        print("Mise à jour de raspberry-concept.py effectuée avec succès.")
-                        speak("Installation en cours. Redémarrage du programme.")
-                        # Suppression de l'ancienne version si nécessaire
-                        if os.path.exists("raspberry-concept.py"):
-                            os.remove("raspberry-concept.py")
-                            print("Ancienne version de raspberry-concept.py supprimée.")
-                        # Renommer le nouveau fichier pour remplacer l'ancien
-                        os.rename("raspberry-concept_new.py", "raspberry-concept.py")
-                        # Fermeture du fichier check-for-updates.txt
-                        update_file.close()
-                        # Suppression de check-for-updates.txt après mise à jour
-                        os.remove("check-for-updates.txt")
-                        # Redémarrage du script
-                        python = sys.executable
-                        os.execl(python, python, *sys.argv)
+    try:
+        # Téléchargement de check-for-updates.txt
+        response = requests.get(check_for_update_url)
+        if response.status_code == 200:
+            update_content = response.text.strip().lower()
+            if update_content.startswith("version"):
+                new_version = update_content.split("=")[1].strip()
+                if compare_versions(new_version, VERSION) > 0:
+                    print(f"Une nouvelle version {new_version} est disponible.")
+                    speak(f"Une nouvelle version {new_version} est disponible. Voulez-vous télécharger la mise à jour ?")
+                    user_input = listen()
+                    if user_input == "oui":
+                        # Téléchargement et remplacement de raspberry-concept.py
+                        response = requests.get(raspberry_concept_url)
+                        if response.status_code == 200:
+                            with open("raspberry-concept_new.py", "wb") as f:
+                                f.write(response.content)
+                            print("Mise à jour de raspberry-concept.py effectuée avec succès.")
+                            speak("Mise à jour effectuée. Redémarrage du programme.")
+                            # Suppression de l'ancienne version si nécessaire
+                            if os.path.exists("raspberry-concept.py"):
+                                os.remove("raspberry-concept.py")
+                                print("Ancienne version de raspberry-concept.py supprimée.")
+                            # Renommer le nouveau fichier pour remplacer l'ancien
+                            os.rename("raspberry-concept_new.py", "raspberry-concept.py")
+                            # Redémarrage du script
+                            python = sys.executable
+                            os.execl(python, python, *sys.argv)
+                        else:
+                            print("Échec du téléchargement de la nouvelle version.")
+                            speak("Échec de la mise à jour. Veuillez réessayer plus tard.")
                     else:
-                        print("Échec de la mise à jour de raspberry-concept.py.")
-                        speak("Échec de la mise à jour. Veuillez réessayer plus tard.")
+                        print("Mise à jour refusée par l'utilisateur.")
+                        speak("Mise à jour refusée. Continuation du programme.")
                 else:
-                    print("Mise à jour refusée par l'utilisateur.")
-                    speak("Mise à jour refusée. Continuation du programme.")
-            elif update_content == "false":
-                print("Aucune mise à jour disponible.")
-                speak("Aucune mise à jour disponible. Continuation du programme.")
+                    print("Vous utilisez déjà la version la plus récente.")
+                    speak("Vous utilisez déjà la version la plus récente. Continuation du programme.")
             else:
-                print(f"Contenu invalide dans check-for-updates.txt : {update_content}")
+                print("Contenu invalide dans check-for-updates.txt.")
                 speak("Erreur dans le fichier de mise à jour. Veuillez vérifier.")
+        else:
+            print(f"Échec du téléchargement de check-for-updates.txt : code de statut {response.status_code}")
+            speak("Échec du téléchargement du fichier de mise à jour. Veuillez vérifier la connexion internet.")
+    except requests.exceptions.RequestException as e:
+        print(f"Erreur lors du téléchargement de check-for-updates.txt : {e}")
+        speak("Erreur lors du téléchargement du fichier de mise à jour. Veuillez vérifier la connexion internet.")
+
+# Fonction pour comparer les versions
+def compare_versions(version1, version2):
+    # Convertir les versions en tuples d'entiers pour la comparaison
+    version1_parts = tuple(map(int, version1.split(".")))
+    version2_parts = tuple(map(int, version2.split(".")))
+    
+    if version1_parts > version2_parts:
+        return 1
+    elif version1_parts < version2_parts:
+        return -1
     else:
-        print("Échec du téléchargement de check-for-updates.txt.")
-        speak("Échec du téléchargement du fichier de mise à jour. Veuillez vérifier la connexion internet.")
+        return 0
 
 # Appel de la fonction principale pour vérifier et mettre à jour
 check_and_update()
@@ -82,7 +103,6 @@ check_and_update()
 
 
 
-import speech_recognition as sr
 import pygame
 import random
 from threading import Timer
