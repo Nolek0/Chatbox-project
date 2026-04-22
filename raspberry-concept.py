@@ -7,16 +7,11 @@ pygame.mixer.init()
 import tempfile
 import subprocess
 import sys
+import hashlib
 import speech_recognition as sr  # Import de speech_recognition
 
-#test finallllll
-
-# URL et nom du fichier de vérification de mise à jour
-check_for_update_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/check-for-updates.txt"
+# URL du fichier principal à surveiller sur GitHub
 raspberry_concept_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/raspberry-concept.py"
-
-# Numéro de version actuelle de raspberry-concept.py
-VERSION = "1.05"
 
 # Fonction pour parler avec gTTS (Google Text-to-Speech)
 def speak(text):
@@ -47,21 +42,22 @@ def listen():
         print("Désolé, une erreur s'est produite lors de la requête vers Google Speech Recognition.")
         return ""
 
-# Fonction principale pour vérifier et mettre à jour si nécessaire
+# Fonction principale : détection de mise à jour par COMPARAISON DE HASH.
+# Principe : on télécharge le fichier raspberry-concept.py depuis GitHub,
+# on calcule son SHA256, et on le compare au SHA256 du fichier local.
+# Si les hash sont différents -> le code a changé -> mise à jour disponible.
+# Plus besoin d'un numéro de version : n'importe quelle modif sur GitHub est détectée.
 def check_and_update():
     try:
-        # Chemins ABSOLUS basés sur l'emplacement réel du script.
-        # (Évite les problèmes si le script est lancé depuis un autre dossier de travail)
+        # Chemins ABSOLUS basés sur l'emplacement réel du script
         script_path = os.path.abspath(__file__)
         script_dir = os.path.dirname(script_path)
         new_file_path = os.path.join(script_dir, "raspberry-concept_new.py")
         backup_path = os.path.join(script_dir, "raspberry-concept_backup.py")
 
-        # --- Téléchargement de check-for-updates.txt ---
+        # --- Téléchargement du fichier distant ---
         # IMPORTANT : raw.githubusercontent.com utilise un CDN qui cache les fichiers
-        # pendant ~5 minutes. Si on ne casse pas le cache, on peut continuer à recevoir
-        # l'ancienne version pendant plusieurs minutes après un push GitHub.
-        # On ajoute donc un timestamp en paramètre + des headers "no-cache".
+        # pendant ~5 min. On force un fetch frais avec un cache-buster + headers no-cache.
         import time as _time
         cache_buster = f"?t={int(_time.time())}"
         headers = {
@@ -69,49 +65,46 @@ def check_and_update():
             "Pragma": "no-cache",
             "Expires": "0",
         }
-        url_with_bust = check_for_update_url + cache_buster
+        url_with_bust = raspberry_concept_url + cache_buster
         print(f"[MAJ] Vérification de : {url_with_bust}")
-        response = requests.get(url_with_bust, headers=headers, timeout=15)
+
+        try:
+            response = requests.get(url_with_bust, headers=headers, timeout=30)
+        except requests.exceptions.RequestException as e:
+            print(f"[MAJ] Erreur réseau : {e}")
+            speak("Erreur de connexion. Impossible de vérifier les mises à jour.")
+            return
 
         if response.status_code != 200:
-            print(f"[MAJ] Échec du téléchargement de check-for-updates.txt : code {response.status_code}")
-            speak("Échec du téléchargement du fichier de mise à jour. Veuillez vérifier la connexion internet.")
+            print(f"[MAJ] Échec du téléchargement : code {response.status_code}")
+            speak("Échec du téléchargement. Veuillez vérifier la connexion internet.")
             return
 
-        raw_content = response.text
-        print(f"[MAJ] Contenu brut reçu : {raw_content!r}")
-
-        # Parsing tolérant : on nettoie la BOM, les espaces, les casses
-        update_content = raw_content.lstrip("\ufeff").strip().lower()
-        print(f"[MAJ] Contenu nettoyé : {update_content!r}")
-
-        # Extraction de la version : on accepte plusieurs formats
-        # "version=1.04", "version = 1.04", "v1.04", "1.04", etc.
-        import re as _re
-        match = _re.search(r"v?e?r?s?i?o?n?\s*[:=]?\s*v?(\d+(?:\.\d+)+)", update_content)
-        if not match:
-            # fallback : on cherche juste une séquence type X.Y ou X.Y.Z n'importe où
-            match = _re.search(r"(\d+(?:\.\d+)+)", update_content)
-
-        if not match:
-            print(f"[MAJ] Aucune version trouvée dans le contenu : {update_content!r}")
-            speak("Erreur dans le fichier de mise à jour. Veuillez vérifier.")
+        remote_content = response.content
+        if not remote_content or len(remote_content) < 100:
+            print("[MAJ] Fichier distant vide ou corrompu.")
+            speak("Fichier distant corrompu. Mise à jour annulée.")
             return
 
-        new_version = match.group(1)
-        print(f"[MAJ] Version distante : {new_version} | Version locale : {VERSION}")
-
-        comparison = compare_versions(new_version, VERSION)
-        if comparison < 0:
-            print(f"[MAJ] Version locale ({VERSION}) plus récente que la distante ({new_version}).")
-            return
-        if comparison == 0:
-            print(f"[MAJ] Version identique ({VERSION}). Pas de mise à jour nécessaire.")
+        # --- Calcul des hashs ---
+        remote_hash = hashlib.sha256(remote_content).hexdigest()
+        try:
+            with open(script_path, "rb") as f:
+                local_hash = hashlib.sha256(f.read()).hexdigest()
+        except OSError as e:
+            print(f"[MAJ] Impossible de lire le fichier local : {e}")
             return
 
-        # --- Une nouvelle version est disponible ---
-        print(f"Une nouvelle version {new_version} est disponible.")
-        speak(f"Une nouvelle version {new_version} est disponible. Voulez-vous télécharger la mise à jour ?")
+        print(f"[MAJ] Hash distant : {remote_hash}")
+        print(f"[MAJ] Hash local   : {local_hash}")
+
+        if remote_hash == local_hash:
+            print("[MAJ] Fichiers identiques. Aucune mise à jour nécessaire.")
+            return
+
+        # --- Une différence est détectée : mise à jour disponible ---
+        print("[MAJ] Le fichier distant est différent du local. Mise à jour disponible !")
+        speak("Une mise à jour est disponible. Voulez-vous l'installer ?")
 
         # Plusieurs tentatives au cas où la reconnaissance vocale échoue
         user_input = ""
@@ -121,73 +114,50 @@ def check_and_update():
                 break
             speak("Je n'ai pas compris. Répondez par oui ou non.")
 
-        # Vérification SOUPLE (c'était le problème principal : avant on testait == "oui",
-        # donc "oui oui", "ouais", "oui d'accord" étaient rejetés)
+        # Vérification SOUPLE : "oui", "ouais", "yes", "ok", "d'accord"...
         reponses_positives = ("oui", "ouais", "ouai", "yep", "yes", "ok", "d'accord", "vas-y")
         reponses_negatives = ("non", "no", "nope", "nan")
 
         if any(mot in user_input for mot in reponses_negatives):
-            print("Mise à jour refusée par l'utilisateur.")
+            print("[MAJ] Refusée par l'utilisateur.")
             speak("Mise à jour refusée. Continuation du programme.")
             return
 
         if not any(mot in user_input for mot in reponses_positives):
-            print(f"Réponse non reconnue : '{user_input}'. Mise à jour annulée.")
+            print(f"[MAJ] Réponse non reconnue : '{user_input}'. Annulation.")
             speak("Je n'ai pas compris votre réponse. Mise à jour annulée.")
             return
 
-        # --- Téléchargement de la nouvelle version ---
-        print(f"Téléchargement de la nouvelle version depuis {raspberry_concept_url}...")
-        speak("Téléchargement de la mise à jour en cours.")
-        try:
-            response = requests.get(raspberry_concept_url, timeout=60)
-        except requests.exceptions.RequestException as e:
-            print(f"Erreur de téléchargement : {e}")
-            speak("Échec du téléchargement. Veuillez vérifier la connexion internet.")
-            return
-
-        if response.status_code != 200:
-            print(f"Échec du téléchargement : code {response.status_code}")
-            speak("Échec de la mise à jour. Veuillez réessayer plus tard.")
-            return
-
-        # Vérification basique que le fichier n'est pas vide/corrompu
-        if not response.content or len(response.content) < 100:
-            print("Le fichier téléchargé semble vide ou corrompu.")
-            speak("Le fichier téléchargé est corrompu. Mise à jour annulée.")
-            return
-
-        # Écriture du nouveau fichier (chemin absolu !)
+        # --- Installation : on a déjà le contenu distant en mémoire, pas besoin de re-télécharger ---
+        speak("Installation de la mise à jour en cours.")
         try:
             with open(new_file_path, "wb") as f:
-                f.write(response.content)
-            print(f"Nouveau fichier écrit : {new_file_path}")
+                f.write(remote_content)
+            print(f"[MAJ] Nouveau fichier écrit : {new_file_path}")
         except OSError as e:
-            print(f"Impossible d'écrire le nouveau fichier : {e}")
-            speak("Erreur lors de l'écriture du fichier. Mise à jour annulée.")
+            print(f"[MAJ] Impossible d'écrire le nouveau fichier : {e}")
+            speak("Erreur lors de l'écriture. Mise à jour annulée.")
             return
 
-        # Sauvegarde de l'ancienne version au cas où la MAJ casse quelque chose
+        # Sauvegarde de l'ancienne version au cas où
         try:
             import shutil
             if os.path.exists(script_path):
                 if os.path.exists(backup_path):
                     os.remove(backup_path)
                 shutil.copy2(script_path, backup_path)
-                print(f"Sauvegarde créée : {backup_path}")
+                print(f"[MAJ] Sauvegarde créée : {backup_path}")
         except OSError as e:
-            print(f"Avertissement : impossible de créer une sauvegarde : {e}")
+            print(f"[MAJ] Avertissement : pas de sauvegarde ({e})")
 
-        # REMPLACEMENT ATOMIQUE : os.replace fonctionne sous Windows ET Linux,
-        # contrairement à os.rename qui échoue sous Windows si la cible existe déjà.
-        # Ça remplace en une seule opération -> plus besoin du remove + rename.
+        # Remplacement ATOMIQUE (fonctionne sous Windows ET Linux)
         try:
             os.replace(new_file_path, script_path)
-            print(f"Ancienne version remplacée par la nouvelle : {script_path}")
-            speak("Mise à jour effectuée. Redémarrage du programme.")
+            print(f"[MAJ] Fichier remplacé : {script_path}")
+            speak("Mise à jour installée. Redémarrage du programme.")
         except OSError as e:
-            print(f"Erreur lors du remplacement : {e}")
-            speak("Erreur lors de l'installation de la mise à jour.")
+            print(f"[MAJ] Erreur lors du remplacement : {e}")
+            speak("Erreur lors de l'installation.")
             if os.path.exists(new_file_path):
                 try:
                     os.remove(new_file_path)
@@ -195,40 +165,21 @@ def check_and_update():
                     pass
             return
 
-        # --- Redémarrage du script avec le nouveau fichier ---
-        # On utilise le chemin ABSOLU du script (avant c'était sys.argv qui pouvait
-        # contenir un chemin relatif ou incomplet)
+        # --- Redémarrage avec le nouveau fichier (chemin absolu) ---
         python = sys.executable
-        print(f"Redémarrage : {python} {script_path}")
+        print(f"[MAJ] Redémarrage : {python} {script_path}")
         try:
             os.execl(python, python, script_path, *sys.argv[1:])
         except OSError as e:
-            # Plan B si os.execl échoue (rare, peut arriver sous Windows)
-            print(f"os.execl a échoué : {e}. Tentative avec subprocess.")
+            # Plan B si execl échoue (rare sous Windows)
+            print(f"[MAJ] os.execl a échoué : {e}. Tentative avec subprocess.")
             subprocess.Popen([python, script_path, *sys.argv[1:]])
             sys.exit(0)
 
-    except requests.exceptions.RequestException as e:
-        print(f"Erreur lors du téléchargement de check-for-updates.txt : {e}")
-        speak("Erreur lors du téléchargement du fichier de mise à jour. Veuillez vérifier la connexion internet.")
     except Exception as e:
-        # Garde-fou : si quoi que ce soit déraille pendant la MAJ,
-        # on ne veut pas crasher tout le programme.
-        print(f"Erreur inattendue lors de la mise à jour : {e}")
+        # Garde-fou global : si quoi que ce soit déraille, le programme continue
+        print(f"[MAJ] Erreur inattendue : {e}")
         speak("Une erreur est survenue lors de la mise à jour. Le programme continue normalement.")
-
-# Fonction pour comparer les versions
-def compare_versions(version1, version2):
-    # Convertir les versions en tuples d'entiers pour la comparaison
-    version1_parts = tuple(map(int, version1.split(".")))
-    version2_parts = tuple(map(int, version2.split(".")))
-    
-    if version1_parts > version2_parts:
-        return 1
-    elif version1_parts < version2_parts:
-        return -1
-    else:
-        return 0
 
 # Appel de la fonction principale pour vérifier et mettre à jour
 check_and_update()
