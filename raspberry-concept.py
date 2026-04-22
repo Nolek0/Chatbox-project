@@ -9,12 +9,14 @@ import subprocess
 import sys
 import speech_recognition as sr  # Import de speech_recognition
 
+#YOYOYOYOOYOYOYOYO
+
 # URL et nom du fichier de vérification de mise à jour
 check_for_update_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/check-for-updates.txt"
 raspberry_concept_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/raspberry-concept.py"
 
 # Numéro de version actuelle de raspberry-concept.py
-VERSION = "1.03"
+VERSION = "1.04"
 
 # Fonction pour parler avec gTTS (Google Text-to-Speech)
 def speak(text):
