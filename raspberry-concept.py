@@ -48,50 +48,138 @@ def listen():
 # Fonction principale pour vérifier et mettre à jour si nécessaire
 def check_and_update():
     try:
+        # Chemins ABSOLUS basés sur l'emplacement réel du script.
+        # (Évite les problèmes si le script est lancé depuis un autre dossier de travail)
+        script_path = os.path.abspath(__file__)
+        script_dir = os.path.dirname(script_path)
+        new_file_path = os.path.join(script_dir, "raspberry-concept_new.py")
+        backup_path = os.path.join(script_dir, "raspberry-concept_backup.py")
+
         # Téléchargement de check-for-updates.txt
-        response = requests.get(check_for_update_url)
-        if response.status_code == 200:
-            update_content = response.text.strip().lower()
-            if update_content.startswith("version"):
-                new_version = update_content.split("=")[1].strip()
-                if compare_versions(new_version, VERSION) > 0:
-                    print(f"Une nouvelle version {new_version} est disponible.")
-                    speak(f"Une nouvelle version {new_version} est disponible. Voulez-vous télécharger la mise à jour ?")
-                    user_input = listen()
-                    if user_input == "oui":
-                        # Téléchargement et remplacement de raspberry-concept.py
-                        response = requests.get(raspberry_concept_url)
-                        if response.status_code == 200:
-                            with open("raspberry-concept_new.py", "wb") as f:
-                                f.write(response.content)
-                            print("Mise à jour de raspberry-concept.py effectuée avec succès.")
-                            speak("Mise à jour effectuée. Redémarrage du programme.")
-                            # Suppression de l'ancienne version si nécessaire
-                            if os.path.exists("raspberry-concept.py"):
-                                os.remove("raspberry-concept.py")
-                                print("Ancienne version de raspberry-concept.py supprimée.")
-                            # Renommer le nouveau fichier pour remplacer l'ancien
-                            os.rename("raspberry-concept_new.py", "raspberry-concept.py")
-                            # Redémarrage du script
-                            python = sys.executable
-                            os.execl(python, python, *sys.argv)
-                        else:
-                            print("Échec du téléchargement de la nouvelle version.")
-                            speak("Échec de la mise à jour. Veuillez réessayer plus tard.")
-                    else:
-                        print("Mise à jour refusée par l'utilisateur.")
-                        speak("Mise à jour refusée. Continuation du programme.")
-                else:
-                    print("Vous utilisez déjà la version la plus récente.")
-            else:
-                print("Contenu invalide dans check-for-updates.txt.")
-                speak("Erreur dans le fichier de mise à jour. Veuillez vérifier.")
-        else:
-            print(f"Échec du téléchargement de check-for-updates.txt : code de statut {response.status_code}")
+        response = requests.get(check_for_update_url, timeout=15)
+        if response.status_code != 200:
+            print(f"Échec du téléchargement de check-for-updates.txt : code {response.status_code}")
             speak("Échec du téléchargement du fichier de mise à jour. Veuillez vérifier la connexion internet.")
+            return
+
+        update_content = response.text.strip().lower()
+        if not update_content.startswith("version"):
+            print("Contenu invalide dans check-for-updates.txt.")
+            speak("Erreur dans le fichier de mise à jour. Veuillez vérifier.")
+            return
+
+        new_version = update_content.split("=")[1].strip()
+        if compare_versions(new_version, VERSION) <= 0:
+            print("Vous utilisez déjà la version la plus récente.")
+            return
+
+        # --- Une nouvelle version est disponible ---
+        print(f"Une nouvelle version {new_version} est disponible.")
+        speak(f"Une nouvelle version {new_version} est disponible. Voulez-vous télécharger la mise à jour ?")
+
+        # Plusieurs tentatives au cas où la reconnaissance vocale échoue
+        user_input = ""
+        for _ in range(3):
+            user_input = listen() or ""
+            if user_input:
+                break
+            speak("Je n'ai pas compris. Répondez par oui ou non.")
+
+        # Vérification SOUPLE (c'était le problème principal : avant on testait == "oui",
+        # donc "oui oui", "ouais", "oui d'accord" étaient rejetés)
+        reponses_positives = ("oui", "ouais", "ouai", "yep", "yes", "ok", "d'accord", "vas-y")
+        reponses_negatives = ("non", "no", "nope", "nan")
+
+        if any(mot in user_input for mot in reponses_negatives):
+            print("Mise à jour refusée par l'utilisateur.")
+            speak("Mise à jour refusée. Continuation du programme.")
+            return
+
+        if not any(mot in user_input for mot in reponses_positives):
+            print(f"Réponse non reconnue : '{user_input}'. Mise à jour annulée.")
+            speak("Je n'ai pas compris votre réponse. Mise à jour annulée.")
+            return
+
+        # --- Téléchargement de la nouvelle version ---
+        print(f"Téléchargement de la nouvelle version depuis {raspberry_concept_url}...")
+        speak("Téléchargement de la mise à jour en cours.")
+        try:
+            response = requests.get(raspberry_concept_url, timeout=60)
+        except requests.exceptions.RequestException as e:
+            print(f"Erreur de téléchargement : {e}")
+            speak("Échec du téléchargement. Veuillez vérifier la connexion internet.")
+            return
+
+        if response.status_code != 200:
+            print(f"Échec du téléchargement : code {response.status_code}")
+            speak("Échec de la mise à jour. Veuillez réessayer plus tard.")
+            return
+
+        # Vérification basique que le fichier n'est pas vide/corrompu
+        if not response.content or len(response.content) < 100:
+            print("Le fichier téléchargé semble vide ou corrompu.")
+            speak("Le fichier téléchargé est corrompu. Mise à jour annulée.")
+            return
+
+        # Écriture du nouveau fichier (chemin absolu !)
+        try:
+            with open(new_file_path, "wb") as f:
+                f.write(response.content)
+            print(f"Nouveau fichier écrit : {new_file_path}")
+        except OSError as e:
+            print(f"Impossible d'écrire le nouveau fichier : {e}")
+            speak("Erreur lors de l'écriture du fichier. Mise à jour annulée.")
+            return
+
+        # Sauvegarde de l'ancienne version au cas où la MAJ casse quelque chose
+        try:
+            import shutil
+            if os.path.exists(script_path):
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+                shutil.copy2(script_path, backup_path)
+                print(f"Sauvegarde créée : {backup_path}")
+        except OSError as e:
+            print(f"Avertissement : impossible de créer une sauvegarde : {e}")
+
+        # REMPLACEMENT ATOMIQUE : os.replace fonctionne sous Windows ET Linux,
+        # contrairement à os.rename qui échoue sous Windows si la cible existe déjà.
+        # Ça remplace en une seule opération -> plus besoin du remove + rename.
+        try:
+            os.replace(new_file_path, script_path)
+            print(f"Ancienne version remplacée par la nouvelle : {script_path}")
+            speak("Mise à jour effectuée. Redémarrage du programme.")
+        except OSError as e:
+            print(f"Erreur lors du remplacement : {e}")
+            speak("Erreur lors de l'installation de la mise à jour.")
+            if os.path.exists(new_file_path):
+                try:
+                    os.remove(new_file_path)
+                except OSError:
+                    pass
+            return
+
+        # --- Redémarrage du script avec le nouveau fichier ---
+        # On utilise le chemin ABSOLU du script (avant c'était sys.argv qui pouvait
+        # contenir un chemin relatif ou incomplet)
+        python = sys.executable
+        print(f"Redémarrage : {python} {script_path}")
+        try:
+            os.execl(python, python, script_path, *sys.argv[1:])
+        except OSError as e:
+            # Plan B si os.execl échoue (rare, peut arriver sous Windows)
+            print(f"os.execl a échoué : {e}. Tentative avec subprocess.")
+            subprocess.Popen([python, script_path, *sys.argv[1:]])
+            sys.exit(0)
+
     except requests.exceptions.RequestException as e:
         print(f"Erreur lors du téléchargement de check-for-updates.txt : {e}")
         speak("Erreur lors du téléchargement du fichier de mise à jour. Veuillez vérifier la connexion internet.")
+    except Exception as e:
+        # Garde-fou : si quoi que ce soit déraille pendant la MAJ,
+        # on ne veut pas crasher tout le programme.
+        print(f"Erreur inattendue lors de la mise à jour : {e}")
+        speak("Une erreur est survenue lors de la mise à jour. Le programme continue normalement.")
 
 # Fonction pour comparer les versions
 def compare_versions(version1, version2):
