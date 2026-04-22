@@ -9,7 +9,7 @@ import subprocess
 import sys
 import speech_recognition as sr  # Import de speech_recognition
 
-#test
+#test finallllll
 
 # URL et nom du fichier de vérification de mise à jour
 check_for_update_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/check-for-updates.txt"
