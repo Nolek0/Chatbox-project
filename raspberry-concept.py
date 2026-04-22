@@ -243,7 +243,7 @@ from translate import Translator
 script_folder = os.path.dirname(os.path.abspath(__file__))
 
 # Supprimer les anciens fichiers spécifiques s'ils existent
-files_to_delete = ["api.env", "quiz.py", "recette.py", "responses.py", "responses_heure.py", "responses_inapproprié.py", "reveil.mp3", "sons-sortant.mp3", "sons-repere.mp3", "demarrage.mp3" ]
+files_to_delete = ["api.env", "quiz.py", "recette.py", "responses.py", "responses_heure.py", "responses_inapproprié.py", "blagues.py", "reveil.mp3", "sons-sortant.mp3", "sons-repere.mp3", "demarrage.mp3" ]
 
 # Liste des fichiers à télécharger avec leurs URLs sur GitHub
 files_to_download = {
@@ -253,6 +253,7 @@ files_to_download = {
     "responses.py": "https://github.com/Nolek0/Chatbox-project/raw/main/responses.py",
     "responses_heure.py": "https://github.com/Nolek0/Chatbox-project/raw/main/responses_heure.py",
     "responses_inapproprié.py": "https://github.com/Nolek0/Chatbox-project/raw/main/responses_inapproprié.py",
+    "blagues.py": "https://github.com/Nolek0/Chatbox-project/raw/main/blagues.py",
     "demarrage.mp3": "https://github.com/Nolek0/Chatbox-project/raw/main/demarrage.mp3",
     "sons-repere.mp3": "https://github.com/Nolek0/Chatbox-project/raw/main/sons-repere.mp3",
     "sons-sortant.mp3": "https://github.com/Nolek0/Chatbox-project/raw/main/sons-sortant.mp3",
@@ -285,6 +286,7 @@ from responses import responses
 from responses_heure import phrases_heure
 from responses_inapproprié import mots_interdits
 from quiz import quiz_questions
+from blagues import blagues
 
 # Utiliser les modules importés selon vos besoins
 print("Tous les fichiers ont été téléchargés et les modules ont été importés avec succès.")
@@ -350,6 +352,17 @@ def reconnaissance_vocale(timeout=10):
         return None  # Retourner None si aucune réponse n'a été capturée
     
 
+
+
+def raconter_blague():
+    """Choisit une blague au hasard, dit la question, fait une pause, puis dit la chute."""
+    blague = random.choice(blagues)
+    print(f"IA (blague) : {blague['question']}")
+    speak(blague["question"])
+    # Pause pour créer l'effet de suspense entre la mise en place et la chute
+    time.sleep(1.8)
+    print(f"IA (chute) : {blague['reponse']}")
+    speak(blague["reponse"])
 
 
 def faire_quiz(nombre_questions):
@@ -702,6 +715,31 @@ def main():
                     listening = False
                     continue
                 
+            # --- Détection de la demande de blague ---
+            # Plein de formulations acceptées pour être souple avec la reco vocale
+            blague_triggers = [
+                "fais une blague", "fais moi une blague", "fais-moi une blague",
+                "faisons une blague", "faire une blague",
+                "raconte une blague", "raconte moi une blague", "raconte-moi une blague",
+                "racontes une blague", "racontes moi une blague",
+                "dis une blague", "dis moi une blague", "dis-moi une blague",
+                "tu peux me raconter une blague", "tu peux raconter une blague",
+                "tu peux faire une blague", "tu peux me faire une blague",
+                "j'veux une blague", "je veux une blague", "je voudrais une blague",
+                "balance une blague", "balance moi une blague",
+                "blague stp", "blague s'il te plaît", "blague s'il te plait",
+                "une blague", "sort une blague", "sors une blague",
+                "sors moi une blague", "sors-moi une blague",
+                "fais rire", "fais moi rire", "fais-moi rire",
+            ]
+            if any(trigger in user_input.lower() for trigger in blague_triggers) or \
+               re.search(r"\bblague[s]?\b", user_input.lower()):
+                play_sound_entree()
+                raconter_blague()
+                play_sound_sortie()
+                listening = False
+                continue
+
            # À ajouter dans la boucle principale où vous traitez les commandes utilisateur
             if "score du match entre" in user_input.lower():
                         match = re.search(r"score du match entre (.+) et (.+)", user_input.lower())
