@@ -10,10 +10,22 @@ import sys
 import hashlib
 import speech_recognition as sr  # Import de speech_recognition
 
-# last test
+# URLs pour vérifier les mises à jour.
+# On utilise l'API GitHub en PRIORITAIRE car elle n'est pas derrière le CDN Fastly
+# qui cache agressivement les fichiers raw pendant ~5 minutes.
+# L'URL raw est gardée en fallback si l'API échoue (rate limit, etc.)
+GITHUB_OWNER = "Nolek0"
+GITHUB_REPO = "Chatbox-project"
+GITHUB_BRANCH = "main"
+GITHUB_FILE_PATH = "raspberry-concept.py"
 
-# URL du fichier principal à surveiller sur GitHub
-raspberry_concept_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/raspberry-concept.py"
+raspberry_concept_api_url = (
+    f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+    f"?ref={GITHUB_BRANCH}"
+)
+raspberry_concept_raw_url = (
+    f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}/{GITHUB_FILE_PATH}"
+)
 
 # Fonction pour parler avec gTTS (Google Text-to-Speech)
 def speak(text):
@@ -58,31 +70,58 @@ def check_and_update():
         backup_path = os.path.join(script_dir, "raspberry-concept_backup.py")
 
         # --- Téléchargement du fichier distant ---
-        # IMPORTANT : raw.githubusercontent.com utilise un CDN qui cache les fichiers
-        # pendant ~5 min. On force un fetch frais avec un cache-buster + headers no-cache.
+        # On essaie D'ABORD l'API GitHub (api.github.com) qui renvoie toujours
+        # le contenu frais, puis on tombe back sur l'URL raw si ça échoue.
+        # Le CDN de raw.githubusercontent.com peut servir de l'ancien contenu
+        # pendant plusieurs minutes malgré les headers no-cache -> on évite.
         import time as _time
-        cache_buster = f"?t={int(_time.time())}"
-        headers = {
+        import uuid as _uuid
+        cache_buster = f"&_cb={_uuid.uuid4()}&t={int(_time.time())}"
+
+        remote_content = None
+
+        # --- 1) Tentative via l'API GitHub (plus fiable, pas de cache CDN) ---
+        api_headers = {
+            # Cet Accept header fait renvoyer le contenu BRUT au lieu du JSON base64
+            "Accept": "application/vnd.github.raw",
+            "User-Agent": f"raspberry-concept-updater-{_uuid.uuid4()}",
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
-            "Expires": "0",
         }
-        url_with_bust = raspberry_concept_url + cache_buster
-        print(f"[MAJ] Vérification de : {url_with_bust}")
-
+        api_url_bust = raspberry_concept_api_url + cache_buster
+        print(f"[MAJ] Tentative via API GitHub : {api_url_bust}")
         try:
-            response = requests.get(url_with_bust, headers=headers, timeout=30)
+            response = requests.get(api_url_bust, headers=api_headers, timeout=30)
+            if response.status_code == 200:
+                remote_content = response.content
+                print(f"[MAJ] OK via API GitHub ({len(remote_content)} octets).")
+            else:
+                print(f"[MAJ] API GitHub -> code {response.status_code}. Fallback raw...")
         except requests.exceptions.RequestException as e:
-            print(f"[MAJ] Erreur réseau : {e}")
-            speak("Erreur de connexion. Impossible de vérifier les mises à jour.")
-            return
+            print(f"[MAJ] API GitHub a échoué : {e}. Fallback raw...")
 
-        if response.status_code != 200:
-            print(f"[MAJ] Échec du téléchargement : code {response.status_code}")
-            speak("Échec du téléchargement. Veuillez vérifier la connexion internet.")
-            return
+        # --- 2) Fallback : URL raw avec cache-busting agressif ---
+        if remote_content is None:
+            raw_headers = {
+                "User-Agent": f"raspberry-concept-updater-{_uuid.uuid4()}",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            }
+            raw_url_bust = raspberry_concept_raw_url + "?" + cache_buster.lstrip("&")
+            print(f"[MAJ] Tentative via URL raw : {raw_url_bust}")
+            try:
+                response = requests.get(raw_url_bust, headers=raw_headers, timeout=30)
+            except requests.exceptions.RequestException as e:
+                print(f"[MAJ] Erreur réseau : {e}")
+                speak("Erreur de connexion. Impossible de vérifier les mises à jour.")
+                return
+            if response.status_code != 200:
+                print(f"[MAJ] Échec du téléchargement : code {response.status_code}")
+                speak("Échec du téléchargement. Veuillez vérifier la connexion internet.")
+                return
+            remote_content = response.content
 
-        remote_content = response.content
         if not remote_content or len(remote_content) < 100:
             print("[MAJ] Fichier distant vide ou corrompu.")
             speak("Fichier distant corrompu. Mise à jour annulée.")
