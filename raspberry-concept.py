@@ -10,8 +10,6 @@ import sys
 import hashlib
 import speech_recognition as sr  # Import de speech_recognition
 
-#testttt mamamamamamma citã
-
 # URLs pour vérifier les mises à jour.
 # On utilise l'API GitHub en PRIORITAIRE car elle n'est pas derrière le CDN Fastly
 # qui cache agressivement les fichiers raw pendant ~5 minutes.
