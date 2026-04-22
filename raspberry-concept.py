@@ -10,6 +10,8 @@ import sys
 import hashlib
 import speech_recognition as sr  # Import de speech_recognition
 
+# last test
+
 # URL du fichier principal à surveiller sur GitHub
 raspberry_concept_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/raspberry-concept.py"
 
