@@ -1,6 +1,8 @@
 import requests
+from pathlib import Path
 import os
-import pyttsx3
+from gtts import gTTS
+import tempfile
 import subprocess
 import sys
 import speech_recognition as sr  # Import de speech_recognition
@@ -12,11 +14,17 @@ raspberry_concept_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-projec
 # Numéro de version actuelle de raspberry-concept.py
 VERSION = "1.02"
 
-# Fonction pour parler avec pyttsx3
+# Fonction pour parler avec gTTS (Google Text-to-Speech)
 def speak(text):
-    engine = pyttsx3.init()
-    engine.say(text)
-    engine.runAndWait()
+    tts = gTTS(text=text, lang="fr")
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+        tmp_path = f.name
+    tts.save(tmp_path)
+    pygame.mixer.music.load(tmp_path)
+    pygame.mixer.music.play()
+    while pygame.mixer.music.get_busy():
+        pygame.time.Clock().tick(10)
+    os.remove(tmp_path)
 
 # Fonction pour écouter la réponse vocale
 def listen():
@@ -169,7 +177,6 @@ football_api_key = os.getenv('FOOTBALL_API_KEY')
 
 
 
-engine = pyttsx3.init()
 pygame.init()
 
 # Délai d'inactivité en secondes
@@ -183,17 +190,23 @@ course_file = "course.txt"
 SON_REVEIL = "reveil.mp3"
 
 def play_sound_entree():
-    pygame.mixer.music.load('sons-repere.mp3')
+    file_path = Path(__file__).parent / "sons-repere.mp3"
+    
+    pygame.mixer.music.load(file_path)
     pygame.mixer.music.play()
 
 def play_sound_sortie():
-    pygame.mixer.music.load('sons-sortant.mp3')
+    file_path = Path(__file__).parent / "sons-sortant.mp3"
+    pygame.mixer.music.load(file_path)
     pygame.mixer.music.play()
     
 def play_sound_demarrage():
-    pygame.mixer.init()  # Initialisation de pygame mixer
-    pygame.mixer.music.load('demarrage.mp3')
-    pygame.mixer.music.play()    
+    pygame.mixer.init()
+    
+    file_path = Path(__file__).parent / "demarrage.mp3"
+    
+    pygame.mixer.music.load(file_path)
+    pygame.mixer.music.play()
 
 def play_sound_reveil():
     pygame.mixer.music.load(SON_REVEIL)
@@ -226,21 +239,17 @@ def faire_quiz(nombre_questions):
     score = 0
 
     for question, reponses in questions_selectionnees:
-        engine.say(question)
-        engine.runAndWait()
+        speak(question)
 
         user_input = reconnaissance_vocale(timeout=10)
 
         if user_input and any(reponse.lower() in user_input.lower() for reponse in reponses):
             score += 1
-            engine.say("Correct !")
-            engine.runAndWait()
+            speak("Correct !")
         else:
-            engine.say("Incorrect. La bonne réponse était " + ", ".join(reponses))
-            engine.runAndWait()
+            speak("Incorrect. La bonne réponse était " + ", ".join(reponses))
 
-    engine.say(f"Quiz terminé ! Votre score est de {score}/{nombre_questions}.")
-    engine.runAndWait()
+    speak(f"Quiz terminé ! Votre score est de {score}/{nombre_questions}.")
 
     print(f"IA: Quiz terminé ! Votre score est de {score}/{nombre_questions}.")
 
@@ -405,25 +414,20 @@ def traduire_phrase(phrase, langue_cible):
         return None
 
 def demander_epellation(reponse):
-    engine.say(f"Voulez-vous que je l'épelle ?")
-    engine.runAndWait()
+    speak(f"Voulez-vous que je l'épelle ?")
 
     user_input = reconnaissance_vocale(timeout=10)
 
     if user_input:
         if "oui" in user_input.lower() or "ouais" in user_input.lower():
-            engine.runAndWait()
             for lettre in reponse:
-                engine.say(lettre)
-                engine.runAndWait()
+                speak(lettre)
         elif "non" in user_input.lower() or "no" in user_input.lower():
             pass  # Ne fait rien si l'utilisateur dit non
         else:
-            engine.say("Je n'ai pas compris votre réponse. Je vais passer à la question suivante.")
-            engine.runAndWait()
+            speak("Je n'ai pas compris votre réponse. Je vais passer à la question suivante.")
     else:
-        engine.say("Désolé, je n'ai pas entendu de réponse. Je vais passer à la question suivante.")
-        engine.runAndWait()
+        speak("Désolé, je n'ai pas entendu de réponse. Je vais passer à la question suivante.")
 
 def calculer_expression(expression):
     # Cette fonction évalue une expression mathématique simple
@@ -461,25 +465,16 @@ def calculer_expression(expression):
         return None
 
 def parler_plus_vite():
-    vitesse_actuelle = engine.getProperty('rate')
-    engine.setProperty('rate', vitesse_actuelle + 50)
-    engine.say("Je parle maintenant plus vite.")
-    engine.runAndWait()
+    speak("Désolé, le réglage de vitesse n'est pas disponible avec Google TTS.")
 
 def parler_moins_vite():
-    vitesse_actuelle = engine.getProperty('rate')
-    engine.setProperty('rate', vitesse_actuelle - 50)
-    engine.say("Je parle maintenant moins vite.")
-    engine.runAndWait()
+    speak("Désolé, le réglage de vitesse n'est pas disponible avec Google TTS.")
 
 def parler_normalement():
-    engine.setProperty('rate', 200)  # Remplacez 200 par la valeur de votre vitesse de base
-    engine.say("Je parle maintenant normalement.")
-    engine.runAndWait()
+    speak("Je parle déjà normalement.")
 
 def main():
     play_sound_demarrage()
-    global engine  # Déclare engine comme variable globale
     
     time.sleep(2)
     
@@ -487,20 +482,13 @@ def main():
     play_intro = check_intro_file()
 
     if play_intro:
-        # Initialisation du moteur de synthèse vocale
-        engine = pyttsx3.init()
-        voices = engine.getProperty('voices')
-        engine.setProperty('voice', voices[0].id)  # Sélectionne la première voix par défaut
-        engine.say("Bienvenue sur le chatbot. Pour me parler, dites 'OK Assistant' suivi de votre question.")
-        engine.runAndWait()
+        speak("Bienvenue sur le chatbot. Pour me parler, dites 'OK Assistant' suivi de votre question.")
 
         # Met à jour intro.txt pour indiquer que l'introduction a été jouée
         with open("intro.txt", "w") as f:
             f.write("intro = false\n")
 
     global last_interaction_time
-    voices = engine.getProperty('voices')
-    engine.setProperty('voice', voices[0].id)
 
     print("Bienvenue ! Posez-moi des questions.")
     listening = False
@@ -548,9 +536,8 @@ def main():
         if user_input:
             if est_mot_interdit(user_input):
                 print("IA: Je ne répondrai pas à cela.")
-                engine.say("Je ne répondrai pas à cela. Le mot utilisé peut être à usage inaproprié")
+                speak("Je ne répondrai pas à cela. Le mot utilisé peut être à usage inaproprié")
                 play_sound_sortie()
-                engine.runAndWait()
                 listening = False 
                 continue
 
@@ -578,25 +565,21 @@ def main():
                         traduction = traduire_phrase(phrase_traduire, code_langue)
                         if traduction:
                             print(f"Traduction en {langue_cible}: {traduction}")
-                            engine.say(f"Traduction en {langue_cible}: {traduction}")
-                            engine.runAndWait()
+                            speak(f"Traduction en {langue_cible}: {traduction}")
                             demander_epellation(traduction)
                         else:
                             print(f"IA: Désolé, je n'ai pas pu traduire en '{langue_cible}'.")
-                            engine.say(f"Désolé, je n'ai pas pu traduire en '{langue_cible}'.")
-                            engine.runAndWait()
+                            speak(f"Désolé, je n'ai pas pu traduire en '{langue_cible}'.")
                         play_sound_sortie()
                     else:
                         print("IA: Désolé, je n'ai pas compris la demande de traduction.")
-                        engine.say("Désolé, je n'ai pas compris la demande de traduction.")
-                        engine.runAndWait()
+                        speak("Désolé, je n'ai pas compris la demande de traduction.")
                     attente_langue = False
                     listening = False
                     continue
                 else:
                     print("IA: Désolé, je n'ai pas compris la langue spécifiée.")
-                    engine.say("Désolé, je n'ai pas compris la langue spécifiée.")
-                    engine.runAndWait()
+                    speak("Désolé, je n'ai pas compris la langue spécifiée.")
                     attente_langue = False
                     listening = False
                     continue
@@ -609,12 +592,10 @@ def main():
                             equipe2 = match.group(2).strip()
                             score = obtenir_score_match(equipe1, equipe2)
                             print(f"IA: {score}")
-                            engine.say(score)
-                            engine.runAndWait()
+                            speak(score)
                         else:
                             print("IA: Désolé, je n'ai pas compris la demande de score de match.")
-                            engine.say("Désolé, je n'ai pas compris la demande de score de match.")
-                            engine.runAndWait()
+                            speak("Désolé, je n'ai pas compris la demande de score de match.")
             
 
             if re.search(r"\bmétéo\b|\btemps\b", user_input.lower()):
@@ -624,12 +605,11 @@ def main():
                     meteo = obtenir_meteo_ville(ville)
                     if "erreur" in meteo.lower():
                         print(f"IA: {meteo}")  
-                        engine.say(meteo)
+                        speak(meteo)
                     else:
                         print(f"IA: {meteo}")
-                        engine.say(meteo)
-                    play_sound_sortie() 
-                    engine.runAndWait()
+                        speak(meteo)
+                    play_sound_sortie()
                 else:
                     print("IA: Désolé, je n'ai pas compris la demande de météo.")
                 listening = False  
@@ -640,9 +620,8 @@ def main():
                 print(f"Heure actuelle: {current_time}")
                 phrase = random.choice(phrases_heure).format(heure=current_time)
                 print(f"IA: {phrase}")
-                engine.say(phrase)
-                play_sound_sortie() 
-                engine.runAndWait()
+                speak(phrase)
+                play_sound_sortie()
                 listening = False 
                 continue
 
@@ -653,14 +632,12 @@ def main():
                 
                 # Demander la langue pour la traduction
                 if phrase_traduire:
-                    engine.say("En quelle langue souhaitez-vous la date ?")
-                    engine.runAndWait()
+                    speak("En quelle langue souhaitez-vous la date ?")
                     attente_langue = True
                     continue
                 
                 # Si aucune traduction n'est demandée, dire la date directement
-                engine.say(f"Aujourd'hui, nous sommes le {current_date}.")
-                engine.runAndWait()
+                speak(f"Aujourd'hui, nous sommes le {current_date}.")
                 play_sound_sortie()
                 listening = False
                 continue
@@ -675,11 +652,9 @@ def main():
                         pre_requis = ", ".join(recette["pre_requis"])
                         instructions = "\n".join(recette["instructions"])
 
-                        engine.say(f"Pour faire {plat}, vous avez besoin de {pre_requis}. Voici les instructions détaillées : {instructions}")
-                        engine.runAndWait()
+                        speak(f"Pour faire {plat}, vous avez besoin de {pre_requis}. Voici les instructions détaillées : {instructions}")
                     else:
-                        engine.say(f"Désolé, je n'ai pas la recette pour {plat}.")
-                        engine.runAndWait()
+                        speak(f"Désolé, je n'ai pas la recette pour {plat}.")
                     listening = False
                     continue
             
@@ -690,8 +665,7 @@ def main():
                 if match:
                     minutes = int(match.group(1))
                     demarrer_minuteur(minutes)
-                    engine.say(f"Minuteur démarré pour {minutes} minutes.")
-                    engine.runAndWait()
+                    speak(f"Minuteur démarré pour {minutes} minutes.")
                     listening = False
                 else:
                     print("IA: Désolé, je n'ai pas compris la demande de minuterie.")
@@ -703,8 +677,7 @@ def main():
                 if match:
                     phrase_traduire = match.group(1).strip()
                     print(f"Traduction de '{phrase_traduire}'...")
-                    engine.say("En quelle langue souhaitez-vous traduire ?")
-                    engine.runAndWait()
+                    speak("En quelle langue souhaitez-vous traduire ?")
                     attente_langue = True
                 else:
                     print("IA: Désolé, je n'ai pas compris la demande de traduction.")
@@ -718,8 +691,7 @@ def main():
                     resultat = calculer_expression(expression)
                     if resultat:
                         print(f"IA: Le résultat de '{expression}' est {resultat}.")
-                        engine.say(f"Le résultat est {resultat}.")
-                        engine.runAndWait()
+                        speak(f"Le résultat est {resultat}.")
                     else:
                         print("IA: Désolé, je n'ai pas compris l'expression mathématique.")
                     play_sound_sortie()
@@ -738,8 +710,7 @@ def main():
                     item = match.group(1).strip()
                     ajouter_a_liste_course(item)
                     print(f"IA: '{item}' a été ajouté à votre liste de courses.")
-                    engine.say(f"'{item}' a été ajouté à votre liste de courses.")
-                    engine.runAndWait()
+                    speak(f"'{item}' a été ajouté à votre liste de courses.")
                     play_sound_sortie()
                 else:
                     print("IA: Désolé, je n'ai pas compris la demande d'ajout à la liste de courses.")
@@ -749,15 +720,13 @@ def main():
             if "lis ma liste de courses" in user_input.lower() or "quelle est ma liste de courses" in user_input.lower():
                 liste_courses = lire_liste_course()
                 print(f"IA: {liste_courses}")
-                engine.say(liste_courses)
-                engine.runAndWait()
+                speak(liste_courses)
                 continue
 
             if "supprime ma liste de courses" in user_input.lower():
                 message = supprimer_liste_course()
                 print(f"IA: {message}")
-                engine.say(message)
-                engine.runAndWait()
+                speak(message)
                 continue
             if "ajoute un événement à mon agenda" in user_input.lower():
                         match = re.search(r"ajoute un événement à mon agenda (.+)", user_input.lower())
@@ -765,8 +734,7 @@ def main():
                             evenement = match.group(1).strip()
                             ajouter_evenement_a_agenda(evenement)
                             print(f"IA: '{evenement}' a été ajouté à votre agenda.")
-                            engine.say(f"'{evenement}' a été ajouté à votre agenda.")
-                            engine.runAndWait()
+                            speak(f"'{evenement}' a été ajouté à votre agenda.")
                         else:
                             print("IA: Désolé, je n'ai pas compris la demande d'ajout à l'agenda.")
                         continue
@@ -775,15 +743,13 @@ def main():
             if "liste mon agenda" in user_input.lower() or "quels sont mes événements" in user_input.lower():
                         agenda = lister_agenda()
                         print(f"IA: {agenda}")
-                        engine.say(agenda)
-                        engine.runAndWait()
+                        speak(agenda)
                         continue
 
             if "supprime mon agenda" in user_input.lower():
                         message = supprimer_agenda()
                         print(f"IA: {message}")
-                        engine.say(message)
-                        engine.runAndWait()
+                        speak(message)
                         continue
 
 
@@ -792,13 +758,11 @@ def main():
                     response = random.choice(responses[key])
                     play_sound_sortie()
                     print("IA: ", response)
-                    engine.say(response)
-                    engine.runAndWait()
+                    speak(response)
                     listening = False 
                     break
             else:
                 print("IA: Désolé, je ne comprends pas bien. Pouvez-vous reformuler votre question ?")
-                engine.runAndWait()
         
 
                 
