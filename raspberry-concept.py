@@ -2,6 +2,7 @@ import requests
 from pathlib import Path
 import os
 from gtts import gTTS
+import pygame
 import tempfile
 import subprocess
 import sys
