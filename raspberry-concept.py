@@ -14,7 +14,7 @@ check_for_update_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project
 raspberry_concept_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/raspberry-concept.py"
 
 # Numéro de version actuelle de raspberry-concept.py
-VERSION = "1.02"
+VERSION = "1.03"
 
 # Fonction pour parler avec gTTS (Google Text-to-Speech)
 def speak(text):
