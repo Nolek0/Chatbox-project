@@ -9,14 +9,14 @@ import subprocess
 import sys
 import speech_recognition as sr  # Import de speech_recognition
 
-#YOYOYOYOOYOYOYOYO
+#test
 
 # URL et nom du fichier de vérification de mise à jour
 check_for_update_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/check-for-updates.txt"
 raspberry_concept_url = "https://raw.githubusercontent.com/Nolek0/Chatbox-project/main/raspberry-concept.py"
 
 # Numéro de version actuelle de raspberry-concept.py
-VERSION = "1.04"
+VERSION = "1.05"
 
 # Fonction pour parler avec gTTS (Google Text-to-Speech)
 def speak(text):
@@ -57,22 +57,56 @@ def check_and_update():
         new_file_path = os.path.join(script_dir, "raspberry-concept_new.py")
         backup_path = os.path.join(script_dir, "raspberry-concept_backup.py")
 
-        # Téléchargement de check-for-updates.txt
-        response = requests.get(check_for_update_url, timeout=15)
+        # --- Téléchargement de check-for-updates.txt ---
+        # IMPORTANT : raw.githubusercontent.com utilise un CDN qui cache les fichiers
+        # pendant ~5 minutes. Si on ne casse pas le cache, on peut continuer à recevoir
+        # l'ancienne version pendant plusieurs minutes après un push GitHub.
+        # On ajoute donc un timestamp en paramètre + des headers "no-cache".
+        import time as _time
+        cache_buster = f"?t={int(_time.time())}"
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+        url_with_bust = check_for_update_url + cache_buster
+        print(f"[MAJ] Vérification de : {url_with_bust}")
+        response = requests.get(url_with_bust, headers=headers, timeout=15)
+
         if response.status_code != 200:
-            print(f"Échec du téléchargement de check-for-updates.txt : code {response.status_code}")
+            print(f"[MAJ] Échec du téléchargement de check-for-updates.txt : code {response.status_code}")
             speak("Échec du téléchargement du fichier de mise à jour. Veuillez vérifier la connexion internet.")
             return
 
-        update_content = response.text.strip().lower()
-        if not update_content.startswith("version"):
-            print("Contenu invalide dans check-for-updates.txt.")
+        raw_content = response.text
+        print(f"[MAJ] Contenu brut reçu : {raw_content!r}")
+
+        # Parsing tolérant : on nettoie la BOM, les espaces, les casses
+        update_content = raw_content.lstrip("\ufeff").strip().lower()
+        print(f"[MAJ] Contenu nettoyé : {update_content!r}")
+
+        # Extraction de la version : on accepte plusieurs formats
+        # "version=1.04", "version = 1.04", "v1.04", "1.04", etc.
+        import re as _re
+        match = _re.search(r"v?e?r?s?i?o?n?\s*[:=]?\s*v?(\d+(?:\.\d+)+)", update_content)
+        if not match:
+            # fallback : on cherche juste une séquence type X.Y ou X.Y.Z n'importe où
+            match = _re.search(r"(\d+(?:\.\d+)+)", update_content)
+
+        if not match:
+            print(f"[MAJ] Aucune version trouvée dans le contenu : {update_content!r}")
             speak("Erreur dans le fichier de mise à jour. Veuillez vérifier.")
             return
 
-        new_version = update_content.split("=")[1].strip()
-        if compare_versions(new_version, VERSION) <= 0:
-            print("Vous utilisez déjà la version la plus récente.")
+        new_version = match.group(1)
+        print(f"[MAJ] Version distante : {new_version} | Version locale : {VERSION}")
+
+        comparison = compare_versions(new_version, VERSION)
+        if comparison < 0:
+            print(f"[MAJ] Version locale ({VERSION}) plus récente que la distante ({new_version}).")
+            return
+        if comparison == 0:
+            print(f"[MAJ] Version identique ({VERSION}). Pas de mise à jour nécessaire.")
             return
 
         # --- Une nouvelle version est disponible ---
