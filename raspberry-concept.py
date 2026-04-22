@@ -3,6 +3,7 @@ from pathlib import Path
 import os
 from gtts import gTTS
 import pygame
+pygame.mixer.init()
 import tempfile
 import subprocess
 import sys
